@@ -35,7 +35,7 @@
 #include <WiFi.h> // Tested on version 1.2.7
 
 // Select to build recognition firmware or data collection firmware
-// RECOGNITIUON 0 - Build data collection firmware
+// RECOGNITION 0 - Build data collection firmware
 // RECOGNITION 1 - Build firmware for recognition (requires importing a sensiml library)
 
 #define RECOGNITION 0
