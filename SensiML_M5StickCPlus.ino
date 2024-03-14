@@ -34,12 +34,18 @@
 #include <M5StickCPlus.h> //Note: M5StickCPlus2 not yet validated 
 #include <WiFi.h> // Tested on version 1.2.7
 
+// Select to build recognition firmware or data collection firmware
+// RECOGNITIUON 0 - Build data collection firmware
+// RECOGNITION 1 - Build firmware for recognition (requires importing a sensiml library)
+
+#define RECOGNITION 0
+
 //Wi-Fi setup parameters
 const int PACKET_RATE = 30;   // WiFi streaming packet rate in packets/sec (impacts DCL streaming choppiness)
 char wifiSSID[33] = "";     // Configure to SSID for desired WiFi AP to connect
 char wifiPassword[64] = ""; // Configure to password for desired WiFi AP to connect
 
-#define RECOGNITION 1
+
 #if RECOGNITION
 #include <kb.h>
 #include <kb_output.h>
@@ -71,6 +77,7 @@ char classIndex = 0;  // State variable for starting trigger channel amplitude/1
 
 int SAMPLES_PER_PACKET = (PACKET_RATE * (SAMPLE_RATE + 1)) / 1000;  //Adjust samples/packet to yield 10 packets/sec stream no matter the sample rate
 int PACKET_SIZE = SAMPLES_PER_PACKET * CHANNELS_PER_SAMPLE; // accelx,y,z + gyrox,y,z + target gesture class number from BtnA trigger
+
 #if RECOGNITION
 static int16_t pData[CHANNELS_PER_SAMPLE];
 #else
@@ -123,6 +130,30 @@ int ButtonPressTime(uint8_t button) {  // returns 0 if button is currently depre
   return -1;  //  Button not depressed
 }
 
+#if RECOGNITION
+int GetSensorDataSampleRecognition() {  //get one sample frame from IMU FIFO and return number of bytes read
+
+  int16_t temp;
+  
+  if (M5.IMU.getFIFOData(&accX,&accY,&accZ,&gyroX,&gyroY,&gyroZ,&temp) == 0){ //MPU6886 FIFO read returns accelXYZ, gyroXYZ and chip temp, we discard temp
+    pData[0]= accX;
+    pData[1]= accY;
+    pData[2]= accZ;
+    pData[3]= gyroX;
+    pData[4]= gyroY;
+    pData[5]= gyroZ;
+    if (CAPTURE_TRIGGER)
+    {
+    char btnAState = digitalRead(BUTTON_A);
+      pData[6]= (int16_t)digitalRead(BUTTON_A);
+      return 14;
+    }
+    return 12;
+  }
+   
+  return 0;
+}
+#else 
 int GetSensorDataSampleStream(int samplenum) {  //get one sample frame from IMU FIFO and return number of bytes read
   
 
@@ -155,29 +186,8 @@ int GetSensorDataSampleStream(int samplenum) {  //get one sample frame from IMU 
    
   return 0;
 }
+#endif
 
-int GetSensorDataSampleRecognition() {  //get one sample frame from IMU FIFO and return number of bytes read
-
-  int16_t temp;
-  
-  if (M5.IMU.getFIFOData(&accX,&accY,&accZ,&gyroX,&gyroY,&gyroZ,&temp) == 0){ //MPU6886 FIFO read returns accelXYZ, gyroXYZ and chip temp, we discard temp
-    pData[0]= accX;
-    pData[1]= accY;
-    pData[2]= accZ;
-    pData[3]= gyroX;
-    pData[4]= gyroY;
-    pData[5]= gyroZ;
-    if (CAPTURE_TRIGGER)
-    {
-    char btnAState = digitalRead(BUTTON_A);
-      pData[6]= (int16_t)digitalRead(BUTTON_A);
-      return 14;
-    }
-    return 12;
-  }
-   
-  return 0;
-}
 
 
 void ResetDCL() {
@@ -226,7 +236,7 @@ void StreamData(WiFiClient client)
       }
     }
     #else
-    if (GetSensorDataSampleCapture(sampleIndex) > 0) {
+    if (GetSensorDataSampleStream(sampleIndex) > 0) {
       sampleIndex++;
       if (sampleIndex >= SAMPLES_PER_PACKET) {
         client.write(dataPacket, PACKET_SIZE * 2);
